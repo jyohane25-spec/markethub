@@ -1,0 +1,10 @@
+{
+  "name":"MarketHub",
+  "short_name":"MarketHub",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#f6f7fb",
+  "theme_color":"#2563eb",
+  "description":"A simple local marketplace app",
+  "icons":[]
+}
