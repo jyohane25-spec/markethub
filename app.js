@@ -142,6 +142,13 @@ function render() {
                   ✏️ Edit
                 </button>
 
+                <button
+                  class="contact delete-btn"
+                  data-delete="${item.id}"
+                  type="button">
+                  🗑️ Delete
+                </button>
+
               </div>
 
             </div>
@@ -176,6 +183,12 @@ function render() {
   document.querySelectorAll('[data-edit]').forEach((button) => {
     button.onclick = () => {
       openEdit(Number(button.dataset.edit));
+    };
+  });
+
+  document.querySelectorAll('[data-delete]').forEach((button) => {
+    button.onclick = () => {
+      deleteListing(Number(button.dataset.delete));
     };
   });
 }
@@ -274,7 +287,6 @@ function openEdit(id) {
   $('itemPhone').value = item.phone || '';
   $('itemDescription').value = item.description || '';
 
-  // A new photo is optional when editing.
   $('itemImage').required = false;
 
   const title = document.querySelector('.modal-box h2');
@@ -290,6 +302,66 @@ function openEdit(id) {
   $('publishBtn').textContent = 'Save changes';
 
   $('modal').classList.remove('hidden');
+}
+
+async function deleteListing(id) {
+  const item = listings.find(
+    (listing) => Number(listing.id) === Number(id)
+  );
+
+  if (!item) {
+    status('Listing could not be found.', 'error');
+    return;
+  }
+
+  const confirmed = confirm(
+    `Delete "${item.name}"?\n\nThis action cannot be undone.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  status('Deleting listing...');
+
+  try {
+    const { error } = await db
+      .from('listings')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
+
+    listings = listings.filter(
+      (listing) => Number(listing.id) !== Number(id)
+    );
+
+    favorites = favorites.filter(
+      (favoriteId) => Number(favoriteId) !== Number(id)
+    );
+
+    localStorage.setItem(
+      'markethubFavorites',
+      JSON.stringify(favorites)
+    );
+
+    render();
+
+    status(
+      'Listing deleted successfully.',
+      'success'
+    );
+
+  } catch (error) {
+    console.error(error);
+
+    status(
+      'Delete failed: ' + error.message,
+      'error'
+    );
+  }
 }
 
 $('sellTopBtn').onclick = openModal;
@@ -338,12 +410,6 @@ $('listingForm').onsubmit = async (event) => {
 
     let imageUrl = null;
 
-    /*
-      EDITING
-      If the user selected a new photo, upload it.
-      If they didn't, keep the old photo.
-    */
-
     if (editingId) {
       const existing = listings.find(
         (item) => Number(item.id) === Number(editingId)
@@ -351,10 +417,6 @@ $('listingForm').onsubmit = async (event) => {
 
       imageUrl = existing?.image_url || null;
     }
-
-    /*
-      NEW PHOTO
-    */
 
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -411,10 +473,6 @@ $('listingForm').onsubmit = async (event) => {
       image_url: imageUrl
     };
 
-    /*
-      EDIT EXISTING LISTING
-    */
-
     if (editingId) {
       button.textContent = 'Saving changes...';
 
@@ -445,10 +503,6 @@ $('listingForm').onsubmit = async (event) => {
       );
 
     } else {
-
-      /*
-        CREATE NEW LISTING
-      */
 
       if (!file) {
         status(
