@@ -60,18 +60,21 @@ function hideStatus() {
 ========================= */
 
 function updateAccountUI() {
-  const email = $('accountEmail');
-  const loginBtn = $('loginBtn');
-  const logoutBtn = $('logoutBtn');
+const loginBtn = $('loginBtn');
+const logoutBtn = $('logoutBtn');
+const profileBtn = $('profileBtn');
+const accountEmail = $('accountEmail');
 
   if (currentUser) {
     email.textContent = currentUser.email || '';
     loginBtn.classList.add('hidden');
     logoutBtn.classList.remove('hidden');
+    profileBtn.classList.remove('hidden');
   } else {
     email.textContent = '';
     loginBtn.classList.remove('hidden');
     logoutBtn.classList.add('hidden');
+    profileBtn.classList.add('hidden');
   }
 }
 
@@ -388,7 +391,102 @@ function closeModal() {
 /* =========================
    EDIT LISTING
 ========================= */
+function renderProfile() {
+  if (!currentUser) return;
 
+  const profileEmail = $('profileEmail');
+  const profileListingCount = $('profileListingCount');
+  const myListings = $('myListings');
+
+  profileEmail.textContent = currentUser.email || '';
+
+  const mine = listings.filter(item =>
+    item.user_id &&
+    String(item.user_id) === String(currentUser.id)
+  );
+
+  profileListingCount.textContent =
+    `${mine.length} item${mine.length === 1 ? '' : 's'}`;
+
+  if (!mine.length) {
+    myListings.innerHTML = `
+      <p class="profile-empty">
+        You have not posted any listings yet.
+      </p>
+    `;
+    return;
+  }
+
+  myListings.innerHTML = mine.map(item => {
+    const image = item.image_url
+      ? `<img src="${item.image_url}" alt="${item.name}">`
+      : `<div class="profile-no-image">📦</div>`;
+
+    return `
+      <div class="profile-listing">
+        ${image}
+
+        <div class="profile-listing-info">
+          <strong>${item.name || 'Unnamed item'}</strong>
+
+          <span>
+            ${item.price ? `K${item.price}` : 'Price not set'}
+          </span>
+
+          <small>
+            ${item.category || 'Other'} • ${item.location || 'No location'}
+          </small>
+
+          <div class="profile-listing-actions">
+            <button
+              class="account-btn"
+              type="button"
+              data-profile-edit="${item.id}">
+              Edit
+            </button>
+
+            <button
+              class="account-btn"
+              type="button"
+              data-profile-delete="${item.id}">
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  myListings.querySelectorAll('[data-profile-edit]').forEach(button => {
+    button.addEventListener('click', () => {
+      closeProfileModal();
+      openEdit(button.dataset.profileEdit);
+    });
+  });
+
+  myListings.querySelectorAll('[data-profile-delete]').forEach(button => {
+    button.addEventListener('click', () => {
+      deleteListing(button.dataset.profileDelete);
+    });
+  });
+}
+
+
+function openProfileModal() {
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+
+  renderProfile();
+
+  $('profileModal').classList.remove('hidden');
+}
+
+
+function closeProfileModal() {
+  $('profileModal').classList.add('hidden');
+}
 function openEdit(id) {
   if (!currentUser) {
     openAuthModal();
@@ -718,7 +816,20 @@ async function logout() {
 /* =========================
    BUTTON EVENTS
 ========================= */
+$('profileBtn').onclick = openProfileModal;
 
+$('closeProfileModal').onclick = closeProfileModal;
+
+$('profileModal').onclick = (event) => {
+  if (event.target.id === 'profileModal') {
+    closeProfileModal();
+  }
+};
+
+$('profileSellBtn').onclick = () => {
+  closeProfileModal();
+  openModal();
+};
 $('loginBtn').onclick = openAuthModal;
 
 $('logoutBtn').onclick = logout;
