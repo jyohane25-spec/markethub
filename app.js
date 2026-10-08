@@ -1,4 +1,4 @@
-tconst configured =
+const configured =
   SUPABASE_URL &&
   !SUPABASE_URL.includes('PASTE_YOUR') &&
   SUPABASE_PUBLISHABLE_KEY &&
