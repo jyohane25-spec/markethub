@@ -113,7 +113,12 @@
       type="button">
       Log out
     </button>
-
+<button
+id="profileBtn"
+class="account-btn hidden"
+type="button">
+👤 My Profile
+</button>
     <button
       id="sellTopBtn"
       class="sell-top"
@@ -242,7 +247,44 @@
 
 </div>
 
+<!-- PROFILE MODAL -->
+<div id="profileModal" class="modal hidden">
+  <div class="modal-box">
+    <button
+      id="closeProfileModal"
+      class="modal-close"
+      type="button">
+      ×
+    </button>
 
+    <h2>My Profile</h2>
+
+    <p class="modal-sub">
+      Manage your MarketHub account and listings.
+    </p>
+
+    <div class="profile-info">
+      <strong>Email</strong>
+      <p id="profileEmail">-</p>
+
+      <strong>My listings</strong>
+      <p id="profileListingCount">0 items</p>
+    </div>
+
+    <h3>My Listings</h3>
+
+    <div id="myListings" class="profile-listings"></div>
+
+    <button
+      id="profileSellBtn"
+      class="primary full"
+      type="button">
+      + Sell another item
+    </button>
+  </div>
+</div>
+
+<!-- LISTING MODAL -->
 <!-- LISTING MODAL -->
 
 <div id="modal" class="modal hidden">
