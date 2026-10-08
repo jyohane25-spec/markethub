@@ -5,12 +5,16 @@ const configured =
   !SUPABASE_PUBLISHABLE_KEY.includes('PASTE_YOUR');
 
 const db = configured
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  ? window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    )
   : null;
 
 let listings = [];
 let activeCat = 'All';
 let editingId = null;
+let currentUser = null;
 
 let favorites = JSON.parse(
   localStorage.getItem('markethubFavorites') || '[]'
@@ -36,6 +40,11 @@ const icon = (category) => ({
   Other: '🛍️'
 }[category] || '🛍️');
 
+
+/* =========================
+   STATUS
+========================= */
+
 function status(message, type = 'info') {
   $('status').textContent = message;
   $('status').className = 'status ' + type;
@@ -44,6 +53,67 @@ function status(message, type = 'info') {
 function hideStatus() {
   $('status').className = 'status hidden';
 }
+
+
+/* =========================
+   AUTH UI
+========================= */
+
+function updateAccountUI() {
+  const email = $('accountEmail');
+  const loginBtn = $('loginBtn');
+  const logoutBtn = $('logoutBtn');
+
+  if (currentUser) {
+    email.textContent = currentUser.email || '';
+    loginBtn.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+  } else {
+    email.textContent = '';
+    loginBtn.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+  }
+}
+
+function openAuthModal() {
+  $('authModal').classList.remove('hidden');
+  $('authEmail').focus();
+}
+
+function closeAuthModal() {
+  $('authModal').classList.add('hidden');
+  $('authMessage').textContent = '';
+  $('authMessage').className = 'status hidden';
+  $('authForm').reset();
+}
+
+function authMessage(message, type = 'info') {
+  $('authMessage').textContent = message;
+  $('authMessage').className = 'status ' + type;
+}
+
+
+/* =========================
+   LOAD CURRENT USER
+========================= */
+
+async function loadCurrentUser() {
+  if (!db) return;
+
+  const {
+    data: { user }
+  } = await db.auth.getUser();
+
+  currentUser = user || null;
+
+  updateAccountUI();
+  render();
+}
+
+
+/* =========================
+   RENDER LISTINGS
+========================= */
 
 function render() {
   const query = $('searchInput').value.toLowerCase().trim();
@@ -69,10 +139,16 @@ function render() {
     ? results.map((item) => {
         const fav = favorites.includes(Number(item.id));
 
+        const isOwner =
+          currentUser &&
+          item.user_id &&
+          String(item.user_id) === String(currentUser.id);
+
         const image = item.image_url
-          ? `<img class="listing-img"
-                  src="${esc(item.image_url)}"
-                  alt="${esc(item.name)}">`
+          ? `<img
+               class="listing-img"
+               src="${esc(item.image_url)}"
+               alt="${esc(item.name)}">`
           : `<div class="photo-placeholder">
                ${esc(item.icon || icon(item.category))}
              </div>`;
@@ -135,19 +211,25 @@ function render() {
                     : ''
                 }
 
-                <button
-                  class="contact edit-btn"
-                  data-edit="${item.id}"
-                  type="button">
-                  ✏️ Edit
-                </button>
+                ${
+                  isOwner
+                    ? `
+                      <button
+                        class="contact edit-btn"
+                        data-edit="${item.id}"
+                        type="button">
+                        ✏️ Edit
+                      </button>
 
-                <button
-                  class="contact delete-btn"
-                  data-delete="${item.id}"
-                  type="button">
-                  🗑️ Delete
-                </button>
+                      <button
+                        class="contact delete-btn"
+                        data-delete="${item.id}"
+                        type="button">
+                        🗑️ Delete
+                      </button>
+                    `
+                    : ''
+                }
 
               </div>
 
@@ -162,6 +244,9 @@ function render() {
         <p>Try another search or category.</p>
       </div>
     `;
+
+
+  /* FAVORITES */
 
   document.querySelectorAll('[data-fav]').forEach((button) => {
     button.onclick = () => {
@@ -180,11 +265,17 @@ function render() {
     };
   });
 
+
+  /* EDIT */
+
   document.querySelectorAll('[data-edit]').forEach((button) => {
     button.onclick = () => {
       openEdit(Number(button.dataset.edit));
     };
   });
+
+
+  /* DELETE */
 
   document.querySelectorAll('[data-delete]').forEach((button) => {
     button.onclick = () => {
@@ -192,6 +283,11 @@ function render() {
     };
   });
 }
+
+
+/* =========================
+   LOAD LISTINGS
+========================= */
 
 async function load() {
   if (!configured) {
@@ -211,10 +307,12 @@ async function load() {
 
   if (error) {
     console.error(error);
+
     status(
       'Could not load listings. Check your Supabase setup.',
       'error'
     );
+
     return;
   }
 
@@ -224,7 +322,21 @@ async function load() {
   render();
 }
 
+
+/* =========================
+   LISTING MODAL
+========================= */
+
 function openModal() {
+  if (!currentUser) {
+    openAuthModal();
+    authMessage(
+      'Please log in or create an account before selling.',
+      'warning'
+    );
+    return;
+  }
+
   editingId = null;
 
   $('listingForm').reset();
@@ -232,7 +344,9 @@ function openModal() {
   const title = document.querySelector('.modal-box h2');
   const subtitle = document.querySelector('.modal-sub');
 
-  if (title) title.textContent = 'List an item';
+  if (title) {
+    title.textContent = 'List an item';
+  }
 
   if (subtitle) {
     subtitle.textContent =
@@ -256,7 +370,9 @@ function closeModal() {
   const title = document.querySelector('.modal-box h2');
   const subtitle = document.querySelector('.modal-sub');
 
-  if (title) title.textContent = 'List an item';
+  if (title) {
+    title.textContent = 'List an item';
+  }
 
   if (subtitle) {
     subtitle.textContent =
@@ -268,13 +384,37 @@ function closeModal() {
   $('itemImage').required = true;
 }
 
+
+/* =========================
+   EDIT LISTING
+========================= */
+
 function openEdit(id) {
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+
   const item = listings.find(
     (listing) => Number(listing.id) === Number(id)
   );
 
   if (!item) {
-    status('Listing could not be found.', 'error');
+    status(
+      'Listing could not be found.',
+      'error'
+    );
+    return;
+  }
+
+  if (
+    !item.user_id ||
+    String(item.user_id) !== String(currentUser.id)
+  ) {
+    status(
+      'You can only edit your own listings.',
+      'warning'
+    );
     return;
   }
 
@@ -282,17 +422,23 @@ function openEdit(id) {
 
   $('itemName').value = item.name || '';
   $('itemPrice').value = item.price || '';
-  $('itemCategory').value = item.category || 'Other';
-  $('itemLocation').value = item.location || '';
-  $('itemPhone').value = item.phone || '';
-  $('itemDescription').value = item.description || '';
+  $('itemCategory').value =
+    item.category || 'Other';
+  $('itemLocation').value =
+    item.location || '';
+  $('itemPhone').value =
+    item.phone || '';
+  $('itemDescription').value =
+    item.description || '';
 
   $('itemImage').required = false;
 
   const title = document.querySelector('.modal-box h2');
   const subtitle = document.querySelector('.modal-sub');
 
-  if (title) title.textContent = 'Edit listing';
+  if (title) {
+    title.textContent = 'Edit listing';
+  }
 
   if (subtitle) {
     subtitle.textContent =
@@ -304,13 +450,37 @@ function openEdit(id) {
   $('modal').classList.remove('hidden');
 }
 
+
+/* =========================
+   DELETE LISTING
+========================= */
+
 async function deleteListing(id) {
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+
   const item = listings.find(
     (listing) => Number(listing.id) === Number(id)
   );
 
   if (!item) {
-    status('Listing could not be found.', 'error');
+    status(
+      'Listing could not be found.',
+      'error'
+    );
+    return;
+  }
+
+  if (
+    !item.user_id ||
+    String(item.user_id) !== String(currentUser.id)
+  ) {
+    status(
+      'You can only delete your own listings.',
+      'warning'
+    );
     return;
   }
 
@@ -328,18 +498,21 @@ async function deleteListing(id) {
     const { error } = await db
       .from('listings')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
 
     if (error) {
       throw error;
     }
 
     listings = listings.filter(
-      (listing) => Number(listing.id) !== Number(id)
+      (listing) =>
+        Number(listing.id) !== Number(id)
     );
 
     favorites = favorites.filter(
-      (favoriteId) => Number(favoriteId) !== Number(id)
+      (favoriteId) =>
+        Number(favoriteId) !== Number(id)
     );
 
     localStorage.setItem(
@@ -364,176 +537,64 @@ async function deleteListing(id) {
   }
 }
 
-$('sellTopBtn').onclick = openModal;
 
-$('floatingSell').onclick = openModal;
+/* =========================
+   CREATE ACCOUNT
+========================= */
 
-$('closeModal').onclick = closeModal;
-
-$('modal').onclick = (event) => {
-  if (event.target.id === 'modal') {
-    closeModal();
-  }
-};
-
-$('searchInput').oninput = render;
-
-document.querySelectorAll('.cat').forEach((button) => {
-  button.onclick = () => {
-    document
-      .querySelectorAll('.cat')
-      .forEach((item) => item.classList.remove('active'));
-
-    button.classList.add('active');
-
-    activeCat = button.dataset.cat;
-
-    render();
-  };
-});
-
-$('listingForm').onsubmit = async (event) => {
-  event.preventDefault();
-
-  if (!configured) {
-    status('Connect Supabase first.', 'warning');
+async function createAccount() {
+  if (!db) {
+    authMessage(
+      'Supabase is not connected.',
+      'error'
+    );
     return;
   }
 
-  const button = $('publishBtn');
-  const file = $('itemImage').files[0];
+  const email = $('authEmail').value.trim();
+  const password = $('authPassword').value;
 
-  button.disabled = true;
+  if (!email || !password) {
+    authMessage(
+      'Enter your email and password.',
+      'warning'
+    );
+    return;
+  }
+
+  $('signupSubmit').disabled = true;
+
+  authMessage(
+    'Creating your account...'
+  );
 
   try {
-    const category = $('itemCategory').value;
+    const { data, error } =
+      await db.auth.signUp({
+        email,
+        password
+      });
 
-    let imageUrl = null;
-
-    if (editingId) {
-      const existing = listings.find(
-        (item) => Number(item.id) === Number(editingId)
-      );
-
-      imageUrl = existing?.image_url || null;
+    if (error) {
+      throw error;
     }
 
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        status(
-          'Photo is too large. Maximum size is 5 MB.',
-          'warning'
-        );
+    if (data.session) {
+      currentUser = data.user;
 
-        button.disabled = false;
-        return;
-      }
-
-      button.textContent = 'Uploading photo...';
-
-      const extension =
-        (file.name.split('.').pop() || 'jpg').toLowerCase();
-
-      const safeExtension =
-        ['jpg', 'jpeg', 'png', 'webp'].includes(extension)
-          ? extension
-          : 'jpg';
-
-      const path =
-        `${crypto.randomUUID()}.${safeExtension}`;
-
-      const { error: uploadError } =
-        await db.storage
-          .from('listing-images')
-          .upload(path, file, {
-            contentType: file.type,
-            upsert: false
-          });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const { data: publicData } =
-        db.storage
-          .from('listing-images')
-          .getPublicUrl(path);
-
-      imageUrl = publicData.publicUrl;
-    }
-
-    const listing = {
-      name: $('itemName').value.trim(),
-      price: Number($('itemPrice').value),
-      category: category,
-      location: $('itemLocation').value.trim(),
-      phone: $('itemPhone').value.trim(),
-      description: $('itemDescription').value.trim(),
-      icon: icon(category),
-      image_url: imageUrl
-    };
-
-    if (editingId) {
-      button.textContent = 'Saving changes...';
-
-      const { data, error } = await db
-        .from('listings')
-        .update(listing)
-        .eq('id', editingId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      listings = listings.map((item) =>
-        Number(item.id) === Number(editingId)
-          ? data
-          : item
-      );
-
-      render();
-
-      closeModal();
+      updateAccountUI();
+      closeAuthModal();
 
       status(
-        'Listing updated successfully!',
+        'Account created successfully!',
         'success'
       );
 
-    } else {
-
-      if (!file) {
-        status(
-          'Please choose a photo.',
-          'warning'
-        );
-
-        button.disabled = false;
-        return;
-      }
-
-      button.textContent = 'Publishing listing...';
-
-      const { data, error } = await db
-        .from('listings')
-        .insert(listing)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      listings.unshift(data);
-
       render();
 
-      closeModal();
-
-      status(
-        'Listing published successfully! Everyone can now see it.',
+    } else {
+      authMessage(
+        'Account created. Check your email to confirm your account, then log in.',
         'success'
       );
     }
@@ -541,26 +602,538 @@ $('listingForm').onsubmit = async (event) => {
   } catch (error) {
     console.error(error);
 
-    status(
-      'Operation failed: ' + error.message,
+    authMessage(
+      'Sign up failed: ' + error.message,
       'error'
     );
 
   } finally {
-    button.disabled = false;
+    $('signupSubmit').disabled = false;
+  }
+}
 
-    if (editingId) {
-      button.textContent = 'Save changes';
-    } else {
-      button.textContent = 'Publish listing';
+
+/* =========================
+   LOG IN
+========================= */
+
+async function login() {
+  if (!db) {
+    authMessage(
+      'Supabase is not connected.',
+      'error'
+    );
+    return;
+  }
+
+  const email = $('authEmail').value.trim();
+  const password = $('authPassword').value;
+
+  if (!email || !password) {
+    authMessage(
+      'Enter your email and password.',
+      'warning'
+    );
+    return;
+  }
+
+  $('loginSubmit').disabled = true;
+
+  authMessage(
+    'Logging in...'
+  );
+
+  try {
+    const { data, error } =
+      await db.auth.signInWithPassword({
+        email,
+        password
+      });
+
+    if (error) {
+      throw error;
     }
+
+    currentUser = data.user;
+
+    updateAccountUI();
+
+    closeAuthModal();
+
+    status(
+      'Logged in successfully!',
+      'success'
+    );
+
+    render();
+
+  } catch (error) {
+    console.error(error);
+
+    authMessage(
+      'Login failed: ' + error.message,
+      'error'
+    );
+
+  } finally {
+    $('loginSubmit').disabled = false;
+  }
+}
+
+
+/* =========================
+   LOG OUT
+========================= */
+
+async function logout() {
+  if (!db) return;
+
+  const { error } =
+    await db.auth.signOut();
+
+  if (error) {
+    console.error(error);
+
+    status(
+      'Logout failed: ' + error.message,
+      'error'
+    );
+
+    return;
+  }
+
+  currentUser = null;
+
+  updateAccountUI();
+
+  render();
+
+  status(
+    'You have been logged out.',
+    'success'
+  );
+}
+
+
+/* =========================
+   BUTTON EVENTS
+========================= */
+
+$('loginBtn').onclick = openAuthModal;
+
+$('logoutBtn').onclick = logout;
+
+$('closeAuthModal').onclick =
+  closeAuthModal;
+
+$('authModal').onclick = (event) => {
+  if (event.target.id === 'authModal') {
+    closeAuthModal();
   }
 };
 
+$('authForm').onsubmit = async (event) => {
+  event.preventDefault();
+  await login();
+};
+
+$('signupSubmit').onclick =
+  createAccount;
+
+
+$('sellTopBtn').onclick =
+  openModal;
+
+$('floatingSell').onclick =
+  openModal;
+
+$('closeModal').onclick =
+  closeModal;
+
+$('modal').onclick = (event) => {
+  if (event.target.id === 'modal') {
+    closeModal();
+  }
+};
+
+$('searchInput').oninput =
+  render;
+
+
+/* =========================
+   CATEGORIES
+========================= */
+
+document.querySelectorAll('.cat').forEach((button) => {
+  button.onclick = () => {
+
+    document
+      .querySelectorAll('.cat')
+      .forEach((item) =>
+        item.classList.remove('active')
+      );
+
+    button.classList.add('active');
+
+    activeCat =
+      button.dataset.cat;
+
+    render();
+  };
+});
+
+
+/* =========================
+   PUBLISH / UPDATE
+========================= */
+
+$('listingForm').onsubmit =
+  async (event) => {
+
+    event.preventDefault();
+
+    if (!configured) {
+      status(
+        'Connect Supabase first.',
+        'warning'
+      );
+      return;
+    }
+
+    if (!currentUser) {
+      closeModal();
+      openAuthModal();
+
+      authMessage(
+        'Please log in before publishing a listing.',
+        'warning'
+      );
+
+      return;
+    }
+
+    const button =
+      $('publishBtn');
+
+    const file =
+      $('itemImage').files[0];
+
+    button.disabled = true;
+
+    try {
+
+      const category =
+        $('itemCategory').value;
+
+      let imageUrl = null;
+
+      /*
+        EDITING:
+        Keep the old image unless
+        a new photo is selected.
+      */
+
+      if (editingId) {
+
+        const existing =
+          listings.find(
+            (item) =>
+              Number(item.id) ===
+              Number(editingId)
+          );
+
+        if (
+          !existing ||
+          String(existing.user_id) !==
+          String(currentUser.id)
+        ) {
+          throw new Error(
+            'You can only edit your own listing.'
+          );
+        }
+
+        imageUrl =
+          existing.image_url || null;
+      }
+
+
+      /*
+        UPLOAD NEW PHOTO
+      */
+
+      if (file) {
+
+        if (
+          file.size >
+          5 * 1024 * 1024
+        ) {
+
+          status(
+            'Photo is too large. Maximum size is 5 MB.',
+            'warning'
+          );
+
+          button.disabled = false;
+
+          return;
+        }
+
+        button.textContent =
+          'Uploading photo...';
+
+        const extension =
+          (
+            file.name.split('.').pop() ||
+            'jpg'
+          ).toLowerCase();
+
+        const safeExtension =
+          [
+            'jpg',
+            'jpeg',
+            'png',
+            'webp'
+          ].includes(extension)
+            ? extension
+            : 'jpg';
+
+        const path =
+          `${crypto.randomUUID()}.${safeExtension}`;
+
+        const {
+          error: uploadError
+        } =
+          await db.storage
+            .from('listing-images')
+            .upload(
+              path,
+              file,
+              {
+                contentType:
+                  file.type,
+                upsert: false
+              }
+            );
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const {
+          data: publicData
+        } =
+          db.storage
+            .from('listing-images')
+            .getPublicUrl(path);
+
+        imageUrl =
+          publicData.publicUrl;
+      }
+
+
+      const listing = {
+        name:
+          $('itemName')
+            .value
+            .trim(),
+
+        price:
+          Number(
+            $('itemPrice').value
+          ),
+
+        category:
+
+          category,
+
+        location:
+          $('itemLocation')
+            .value
+            .trim(),
+
+        phone:
+          $('itemPhone')
+            .value
+            .trim(),
+
+        description:
+          $('itemDescription')
+            .value
+            .trim(),
+
+        icon:
+          icon(category),
+
+        image_url:
+          imageUrl
+      };
+
+
+      /*
+        UPDATE
+      */
+
+      if (editingId) {
+
+        button.textContent =
+          'Saving changes...';
+
+        const {
+          data,
+          error
+        } =
+          await db
+            .from('listings')
+            .update(listing)
+            .eq(
+              'id',
+              editingId
+            )
+            .eq(
+              'user_id',
+              currentUser.id
+            )
+            .select()
+            .single();
+
+        if (error) {
+          throw error;
+        }
+
+        listings =
+          listings.map(
+            (item) =>
+              Number(item.id) ===
+              Number(editingId)
+                ? data
+                : item
+          );
+
+        render();
+
+        closeModal();
+
+        status(
+          'Listing updated successfully!',
+          'success'
+        );
+
+      } else {
+
+
+        /*
+          NEW LISTING
+        */
+
+        if (!file) {
+
+          status(
+            'Please choose a photo.',
+            'warning'
+          );
+
+          button.disabled =
+            false;
+
+          return;
+        }
+
+        button.textContent =
+          'Publishing listing...';
+
+
+        const newListing = {
+          ...listing,
+
+          user_id:
+            currentUser.id
+        };
+
+
+        const {
+          data,
+          error
+        } =
+          await db
+            .from('listings')
+            .insert(newListing)
+            .select()
+            .single();
+
+        if (error) {
+          throw error;
+        }
+
+        listings.unshift(data);
+
+        render();
+
+        closeModal();
+
+        status(
+          'Listing published successfully! Everyone can now see it.',
+          'success'
+        );
+      }
+
+    } catch (error) {
+
+      console.error(error);
+
+      status(
+        'Operation failed: ' +
+        error.message,
+        'error'
+      );
+
+    } finally {
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        editingId
+          ? 'Save changes'
+          : 'Publish listing';
+    }
+  };
+
+
+/* =========================
+   AUTH STATE CHANGES
+========================= */
+
+if (db) {
+
+  db.auth.onAuthStateChange(
+    (_event, session) => {
+
+      currentUser =
+        session?.user || null;
+
+      updateAccountUI();
+
+      render();
+    }
+  );
+}
+
+
+/* =========================
+   SERVICE WORKER
+========================= */
+
 if ('serviceWorker' in navigator) {
+
   navigator.serviceWorker
     .register('sw.js')
     .catch(console.warn);
 }
 
+
+/* =========================
+   START
+========================= */
+
+loadCurrentUser();
 load();
