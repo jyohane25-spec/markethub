@@ -1,9 +1,355 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MarketHub</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#2563eb"><link rel="stylesheet" href="style.css"></head><body>
-<header class="topbar"><div class="brand">Market<span>Hub</span></div><button id="sellTopBtn" class="primary small">+ Sell Item</button></header>
-<main><section class="hero"><div><p class="eyebrow">YOUR LOCAL MARKETPLACE</p><h1>Buy and sell things<br>near you.</h1><p class="sub">Real listings. Real sellers. Simple buying.</p></div><div class="hero-card">🛍️</div></section>
-<section class="search-area"><input id="searchInput" type="search" placeholder="Search for phones, clothes, furniture..."></section>
-<section class="categories"><button class="cat active" data-cat="All">All</button><button class="cat" data-cat="Phones">📱 Phones</button><button class="cat" data-cat="Electronics">💻 Electronics</button><button class="cat" data-cat="Fashion">👕 Fashion</button><button class="cat" data-cat="Home">🏠 Home</button><button class="cat" data-cat="Vehicles">🚗 Vehicles</button><button class="cat" data-cat="Other">🛍️ Other</button></section>
-<section class="section-head"><h2>Latest listings</h2><span id="count">Loading...</span></section><section id="status" class="status hidden"></section><section id="listings" class="grid"></section></main><button id="floatingSell" class="floating">＋</button>
-<div id="modal" class="modal hidden"><div class="modal-box"><button id="closeModal" class="close">×</button><h2>List an item</h2><p class="muted">Add a photo and your item will be visible to other visitors.</p><form id="listingForm">
-<label>Item photo<input id="itemImage" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG or WebP · max 5 MB</small></label><label>Item name<input id="itemName" required maxlength="120" placeholder="e.g. iPhone 13"></label><label>Price (ZMW)<input id="itemPrice" required type="number" min="0" placeholder="4500"></label><label>Category<select id="itemCategory"><option>Phones</option><option>Electronics</option><option>Fashion</option><option>Home</option><option>Vehicles</option><option>Other</option></select></label><label>Location<input id="itemLocation" required maxlength="120" placeholder="e.g. Lusaka"></label><label>Seller phone<input id="itemPhone" required maxlength="40" type="tel" placeholder="+260 ..."></label><label>Description<textarea id="itemDescription" rows="3" maxlength="1000" placeholder="Describe the item"></textarea></label><button id="publishBtn" class="primary full" type="submit">Publish listing</button></form></div></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MarketHub</title>
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    .account-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .account-btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #eef4ff;
+      color: #1757d6;
+    }
+
+    .logout-btn {
+      background: #ffecec;
+      color: #c62828;
+    }
+
+    .account-email {
+      font-size: 13px;
+      color: #555;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .auth-box {
+      max-width: 420px;
+    }
+
+    .auth-box input {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 7px 0 12px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+    }
+
+    .auth-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .auth-actions button {
+      padding: 12px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .auth-primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .auth-secondary {
+      background: #eef4ff;
+      color: #1757d6;
+    }
+
+    @media(max-width:600px) {
+      .account-email {
+        display: none;
+      }
+
+      .account-area {
+        gap: 5px;
+      }
+
+      .account-btn {
+        padding: 9px 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="topbar">
+  <div class="brand">Market<span>Hub</span></div>
+
+  <div class="account-area">
+    <span id="accountEmail" class="account-email"></span>
+
+    <button
+      id="loginBtn"
+      class="account-btn"
+      type="button">
+      👤 Log in
+    </button>
+
+    <button
+      id="logoutBtn"
+      class="account-btn logout-btn hidden"
+      type="button">
+      Log out
+    </button>
+
+    <button
+      id="sellTopBtn"
+      class="sell-top"
+      type="button">
+      + Sell Item
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <div class="hero-card">
+      <p class="eyebrow">YOUR LOCAL MARKETPLACE</p>
+      <h1>Buy and sell things<br>near you.</h1>
+      <p class="sub">
+        Real listings from people around your community.
+      </p>
+    </div>
+
+    <div class="search-box">
+      <span>🔎</span>
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="Search for phones, cars, clothes..."
+        autocomplete="off">
+    </div>
+  </section>
+
+  <section class="categories">
+    <button class="cat active" data-cat="All">All</button>
+    <button class="cat" data-cat="Phones">📱 Phones</button>
+    <button class="cat" data-cat="Electronics">💻 Electronics</button>
+    <button class="cat" data-cat="Fashion">👕 Fashion</button>
+    <button class="cat" data-cat="Home">🏠 Home</button>
+    <button class="cat" data-cat="Vehicles">🚗 Vehicles</button>
+    <button class="cat" data-cat="Other">🛍️ Other</button>
+  </section>
+
+  <section class="section-head">
+    <h2>Latest listings</h2>
+    <span id="count">Loading...</span>
+  </section>
+
+  <section id="status" class="status hidden"></section>
+
+  <section id="listings" class="grid"></section>
+
+</main>
+
+<button
+  id="floatingSell"
+  class="floating"
+  type="button">
+  ＋
+</button>
+
+
+<!-- AUTH MODAL -->
+
+<div id="authModal" class="modal hidden">
+
+  <div class="modal-box auth-box">
+
+    <button
+      id="closeAuthModal"
+      class="modal-close"
+      type="button">
+      ×
+    </button>
+
+    <h2 id="authTitle">Log in</h2>
+
+    <p id="authSubtitle" class="modal-sub">
+      Log in to manage your MarketHub listings.
+    </p>
+
+    <form id="authForm">
+
+      <label>
+        Email
+        <input
+          id="authEmail"
+          type="email"
+          placeholder="you@example.com"
+          required>
+      </label>
+
+      <label>
+        Password
+        <input
+          id="authPassword"
+          type="password"
+          placeholder="At least 6 characters"
+          minlength="6"
+          required>
+      </label>
+
+      <div class="auth-actions">
+
+        <button
+          id="loginSubmit"
+          class="auth-primary"
+          type="submit">
+          Log in
+        </button>
+
+        <button
+          id="signupSubmit"
+          class="auth-secondary"
+          type="button">
+          Create account
+        </button>
+
+      </div>
+
+    </form>
+
+    <p
+      id="authMessage"
+      class="status hidden">
+    </p>
+
+  </div>
+
+</div>
+
+
+<!-- LISTING MODAL -->
+
+<div id="modal" class="modal hidden">
+
+  <div class="modal-box">
+
+    <button
+      id="closeModal"
+      class="modal-close"
+      type="button">
+      ×
+    </button>
+
+    <h2>List an item</h2>
+
+    <p class="modal-sub">
+      Add your item to MarketHub.
+    </p>
+
+    <form id="listingForm">
+
+      <label>
+        Item photo
+        <input
+          id="itemImage"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          required>
+        <small>
+          JPG, PNG or WebP · max 5 MB
+        </small>
+      </label>
+
+      <label>
+        Item name
+        <input
+          id="itemName"
+          type="text"
+          placeholder="e.g. iPhone 13"
+          required>
+      </label>
+
+      <label>
+        Price
+        <input
+          id="itemPrice"
+          type="number"
+          min="0"
+          placeholder="e.g. 5200"
+          required>
+      </label>
+
+      <label>
+        Category
+        <select id="itemCategory" required>
+          <option value="Phones">Phones</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Fashion">Fashion</option>
+          <option value="Home">Home</option>
+          <option value="Vehicles">Vehicles</option>
+          <option value="Other">Other</option>
+        </select>
+      </label>
+
+      <label>
+        Location
+        <input
+          id="itemLocation"
+          type="text"
+          placeholder="e.g. Lusaka"
+          required>
+      </label>
+
+      <label>
+        Phone number
+        <input
+          id="itemPhone"
+          type="tel"
+          placeholder="e.g. 0971234567"
+          required>
+      </label>
+
+      <label>
+        Description
+        <textarea
+          id="itemDescription"
+          rows="4"
+          placeholder="Describe your item..."
+          required></textarea>
+      </label>
+
+      <button
+        id="publishBtn"
+        type="submit">
+        Publish listing
+      </button>
+
+    </form>
+
+  </div>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
