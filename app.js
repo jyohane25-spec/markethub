@@ -10,6 +10,8 @@ const db = configured
 
 let listings = [];
 let activeCat = 'All';
+let editingId = null;
+
 let favorites = JSON.parse(
   localStorage.getItem('markethubFavorites') || '[]'
 );
@@ -35,151 +37,132 @@ const icon = (category) => ({
 }[category] || '🛍️');
 
 function status(message, type = 'info') {
-  const el = $('status');
-  if (!el) return;
-
-  el.textContent = message;
-  el.className = `status ${type}`;
+  $('status').textContent = message;
+  $('status').className = 'status ' + type;
 }
 
 function hideStatus() {
-  const el = $('status');
-  if (!el) return;
-
-  el.className = 'status hidden';
+  $('status').className = 'status hidden';
 }
 
 function render() {
-  const search = $('searchInput');
+  const query = $('searchInput').value.toLowerCase().trim();
 
-  const query = search
-    ? search.value.toLowerCase().trim()
-    : '';
-
-  const filtered = listings.filter((item) => {
+  const results = listings.filter((item) => {
     const matchesCategory =
       activeCat === 'All' || item.category === activeCat;
 
-    const searchableText = `
-      ${item.name || ''}
-      ${item.category || ''}
-      ${item.location || ''}
-      ${item.description || ''}
+    const text = `
+      ${item.name}
+      ${item.category}
+      ${item.location}
+      ${item.description}
     `.toLowerCase();
 
-    return matchesCategory && searchableText.includes(query);
+    return matchesCategory && text.includes(query);
   });
 
   $('count').textContent =
-    `${filtered.length} item${filtered.length === 1 ? '' : 's'}`;
+    `${results.length} item${results.length === 1 ? '' : 's'}`;
 
-  if (!filtered.length) {
-    $('listings').innerHTML = `
+  $('listings').innerHTML = results.length
+    ? results.map((item) => {
+        const fav = favorites.includes(Number(item.id));
+
+        const image = item.image_url
+          ? `<img class="listing-img"
+                  src="${esc(item.image_url)}"
+                  alt="${esc(item.name)}">`
+          : `<div class="photo-placeholder">
+               ${esc(item.icon || icon(item.category))}
+             </div>`;
+
+        const whatsappNumber = String(item.phone || '')
+          .replace(/[^0-9]/g, '');
+
+        return `
+          <article class="card">
+
+            <div class="photo">
+              ${image}
+            </div>
+
+            <button
+              class="favorite ${fav ? 'selected' : ''}"
+              data-fav="${item.id}">
+              ${fav ? '♥' : '♡'}
+            </button>
+
+            <div class="card-body">
+
+              <h3>${esc(item.name)}</h3>
+
+              <div class="price">
+                K ${Number(item.price).toLocaleString()}
+              </div>
+
+              <div class="meta">
+                ${esc(item.category)} · ${esc(item.location)}
+              </div>
+
+              <div class="meta">
+                ${esc(item.description || '')}
+              </div>
+
+              <div class="actions">
+
+                <a
+                  class="contact"
+                  href="tel:${esc(item.phone)}">
+                  📞 Call
+                </a>
+
+                ${
+                  whatsappNumber
+                    ? `
+                      <a
+                        class="whatsapp"
+                        target="_blank"
+                        rel="noopener"
+                        href="https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                          'Hi, I saw your ' +
+                          item.name +
+                          ' listing on MarketHub.'
+                        )}">
+                        💬 WhatsApp
+                      </a>
+                    `
+                    : ''
+                }
+
+                <button
+                  class="contact edit-btn"
+                  data-edit="${item.id}"
+                  type="button">
+                  ✏️ Edit
+                </button>
+
+              </div>
+
+            </div>
+
+          </article>
+        `;
+      }).join('')
+    : `
       <div class="empty">
         <h3>No listings found</h3>
         <p>Try another search or category.</p>
       </div>
     `;
-    return;
-  }
-
-  $('listings').innerHTML = filtered.map((item) => {
-    const favorite = favorites.includes(Number(item.id));
-
-    const image = item.image_url
-      ? `
-        <img
-          class="listing-img"
-          src="${esc(item.image_url)}"
-          alt="${esc(item.name)}"
-          loading="lazy"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-        >
-        <div
-          class="photo-placeholder"
-          style="display:none"
-        >
-          ${esc(item.icon || icon(item.category))}
-        </div>
-      `
-      : `
-        <div class="photo-placeholder">
-          ${esc(item.icon || icon(item.category))}
-        </div>
-      `;
-
-    const phone = String(item.phone || '');
-    const whatsappNumber = phone.replace(/[^0-9]/g, '');
-
-    const whatsappButton = whatsappNumber
-      ? `
-        <a
-          class="whatsapp"
-          target="_blank"
-          rel="noopener noreferrer"
-          href="https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-            `Hi, I saw your ${item.name} listing on MarketHub.`
-          )}"
-        >
-          💬 WhatsApp
-        </a>
-      `
-      : '';
-
-    return `
-      <article class="card">
-        <div class="photo">
-          ${image}
-        </div>
-
-        <button
-          class="favorite ${favorite ? 'selected' : ''}"
-          data-fav="${esc(item.id)}"
-          aria-label="${favorite ? 'Remove from favorites' : 'Add to favorites'}"
-          title="${favorite ? 'Remove from favorites' : 'Add to favorites'}"
-        >
-          ${favorite ? '♥' : '♡'}
-        </button>
-
-        <div class="card-body">
-          <h3>${esc(item.name)}</h3>
-
-          <div class="price">
-            K ${Number(item.price || 0).toLocaleString()}
-          </div>
-
-          <div class="meta">
-            ${esc(item.category)} · ${esc(item.location)}
-          </div>
-
-          <div class="meta">
-            ${esc(item.description || '')}
-          </div>
-
-          <div class="actions">
-            <a
-              class="contact"
-              href="tel:${esc(phone)}"
-            >
-              📞 Call
-            </a>
-
-            ${whatsappButton}
-          </div>
-        </div>
-      </article>
-    `;
-  }).join('');
 
   document.querySelectorAll('[data-fav]').forEach((button) => {
     button.onclick = () => {
       const id = Number(button.dataset.fav);
 
-      if (favorites.includes(id)) {
-        favorites = favorites.filter((value) => value !== id);
-      } else {
-        favorites = [...favorites, id];
-      }
+      favorites = favorites.includes(id)
+        ? favorites.filter((x) => x !== id)
+        : [...favorites, id];
 
       localStorage.setItem(
         'markethubFavorites',
@@ -187,6 +170,12 @@ function render() {
       );
 
       render();
+    };
+  });
+
+  document.querySelectorAll('[data-edit]').forEach((button) => {
+    button.onclick = () => {
+      openEdit(Number(button.dataset.edit));
     };
   });
 }
@@ -202,24 +191,17 @@ async function load() {
 
   status('Loading listings...');
 
-  const {
-    data,
-    error
-  } = await db
+  const { data, error } = await db
     .from('listings')
     .select('*')
-    .order('created_at', {
-      ascending: false
-    });
+    .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Load listings error:', error);
-
+    console.error(error);
     status(
       'Could not load listings. Check your Supabase setup.',
       'error'
     );
-
     return;
   }
 
@@ -230,86 +212,84 @@ async function load() {
 }
 
 function openModal() {
-  $('modal').classList.remove('hidden');
+  editingId = null;
 
-  setTimeout(() => {
-    $('itemImage')?.focus();
-  }, 50);
+  $('listingForm').reset();
+
+  const title = document.querySelector('.modal-box h2');
+  const subtitle = document.querySelector('.modal-sub');
+
+  if (title) title.textContent = 'List an item';
+
+  if (subtitle) {
+    subtitle.textContent =
+      'Add your item to MarketHub.';
+  }
+
+  $('publishBtn').textContent = 'Publish listing';
+
+  $('itemImage').required = true;
+
+  $('modal').classList.remove('hidden');
 }
 
 function closeModal() {
   $('modal').classList.add('hidden');
+
+  editingId = null;
+
+  $('listingForm').reset();
+
+  const title = document.querySelector('.modal-box h2');
+  const subtitle = document.querySelector('.modal-sub');
+
+  if (title) title.textContent = 'List an item';
+
+  if (subtitle) {
+    subtitle.textContent =
+      'Add your item to MarketHub.';
+  }
+
+  $('publishBtn').textContent = 'Publish listing';
+
+  $('itemImage').required = true;
 }
 
-function resetPublishButton() {
-  const button = $('publishBtn');
+function openEdit(id) {
+  const item = listings.find(
+    (listing) => Number(listing.id) === Number(id)
+  );
 
-  if (!button) return;
-
-  button.disabled = false;
-  button.textContent = 'Publish listing';
-}
-
-function addImagePreview() {
-  const input = $('itemImage');
-
-  if (!input || document.getElementById('imagePreview')) {
+  if (!item) {
+    status('Listing could not be found.', 'error');
     return;
   }
 
-  const preview = document.createElement('div');
+  editingId = Number(id);
 
-  preview.id = 'imagePreview';
+  $('itemName').value = item.name || '';
+  $('itemPrice').value = item.price || '';
+  $('itemCategory').value = item.category || 'Other';
+  $('itemLocation').value = item.location || '';
+  $('itemPhone').value = item.phone || '';
+  $('itemDescription').value = item.description || '';
 
-  preview.style.marginTop = '10px';
-  preview.style.display = 'none';
+  // A new photo is optional when editing.
+  $('itemImage').required = false;
 
-  preview.innerHTML = `
-    <img
-      id="previewImage"
-      alt="Selected photo preview"
-      style="
-        width:100%;
-        max-height:220px;
-        object-fit:cover;
-        border-radius:12px;
-        display:block;
-      "
-    >
-    <small
-      id="previewText"
-      style="display:block;margin-top:6px;"
-    ></small>
-  `;
+  const title = document.querySelector('.modal-box h2');
+  const subtitle = document.querySelector('.modal-sub');
 
-  input.parentElement.appendChild(preview);
+  if (title) title.textContent = 'Edit listing';
 
-  input.addEventListener('change', () => {
-    const file = input.files?.[0];
+  if (subtitle) {
+    subtitle.textContent =
+      'Change your listing details and save your changes.';
+  }
 
-    if (!file) {
-      preview.style.display = 'none';
-      return;
-    }
+  $('publishBtn').textContent = 'Save changes';
 
-    if (file.size > 5 * 1024 * 1024) {
-      preview.style.display = 'none';
-      status('Photo is too large. Maximum size is 5 MB.', 'warning');
-      input.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      $('previewImage').src = reader.result;
-      $('previewText').textContent = `Selected: ${file.name}`;
-      preview.style.display = 'block';
-      hideStatus();
-    };
-
-    reader.readAsDataURL(file);
-  });
+  $('modal').classList.remove('hidden');
 }
 
 $('sellTopBtn').onclick = openModal;
@@ -348,183 +328,185 @@ $('listingForm').onsubmit = async (event) => {
     return;
   }
 
-  const file = $('itemImage').files?.[0];
-
-  if (!file) {
-    status('Please choose a photo.', 'warning');
-    return;
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    status(
-      'Photo is too large. Maximum size is 5 MB.',
-      'warning'
-    );
-    return;
-  }
-
-  const name = $('itemName').value.trim();
-  const price = Number($('itemPrice').value);
-  const category = $('itemCategory').value;
-  const location = $('itemLocation').value.trim();
-  const phone = $('itemPhone').value.trim();
-  const description = $('itemDescription').value.trim();
-
-  if (!name) {
-    status('Please enter an item name.', 'warning');
-    $('itemName').focus();
-    return;
-  }
-
-  if (!Number.isFinite(price) || price < 0) {
-    status('Please enter a valid price.', 'warning');
-    $('itemPrice').focus();
-    return;
-  }
-
-  if (!location) {
-    status('Please enter the item location.', 'warning');
-    $('itemLocation').focus();
-    return;
-  }
-
-  if (!phone) {
-    status('Please enter the seller phone number.', 'warning');
-    $('itemPhone').focus();
-    return;
-  }
-
   const button = $('publishBtn');
+  const file = $('itemImage').files[0];
 
   button.disabled = true;
-  button.textContent = 'Uploading photo...';
 
   try {
-    const originalExtension =
-      (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const category = $('itemCategory').value;
 
-    const extension =
-      ['jpg', 'jpeg', 'png', 'webp'].includes(originalExtension)
-        ? originalExtension
-        : 'jpg';
+    let imageUrl = null;
 
-    const uniqueId =
-      window.crypto?.randomUUID
-        ? window.crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    /*
+      EDITING
+      If the user selected a new photo, upload it.
+      If they didn't, keep the old photo.
+    */
 
-    const filePath = `${uniqueId}.${extension}`;
-
-    const {
-      error: uploadError
-    } = await db
-      .storage
-      .from('listing-images')
-      .upload(
-        filePath,
-        file,
-        {
-          contentType: file.type,
-          cacheControl: '3600',
-          upsert: false
-        }
+    if (editingId) {
+      const existing = listings.find(
+        (item) => Number(item.id) === Number(editingId)
       );
 
-    if (uploadError) {
-      throw uploadError;
+      imageUrl = existing?.image_url || null;
     }
 
-    button.textContent = 'Publishing listing...';
+    /*
+      NEW PHOTO
+    */
 
-    const {
-      data: publicData
-    } = db
-      .storage
-      .from('listing-images')
-      .getPublicUrl(filePath);
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        status(
+          'Photo is too large. Maximum size is 5 MB.',
+          'warning'
+        );
+
+        button.disabled = false;
+        return;
+      }
+
+      button.textContent = 'Uploading photo...';
+
+      const extension =
+        (file.name.split('.').pop() || 'jpg').toLowerCase();
+
+      const safeExtension =
+        ['jpg', 'jpeg', 'png', 'webp'].includes(extension)
+          ? extension
+          : 'jpg';
+
+      const path =
+        `${crypto.randomUUID()}.${safeExtension}`;
+
+      const { error: uploadError } =
+        await db.storage
+          .from('listing-images')
+          .upload(path, file, {
+            contentType: file.type,
+            upsert: false
+          });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicData } =
+        db.storage
+          .from('listing-images')
+          .getPublicUrl(path);
+
+      imageUrl = publicData.publicUrl;
+    }
 
     const listing = {
-      name,
-      price,
-      category,
-      location,
-      phone,
-      description,
+      name: $('itemName').value.trim(),
+      price: Number($('itemPrice').value),
+      category: category,
+      location: $('itemLocation').value.trim(),
+      phone: $('itemPhone').value.trim(),
+      description: $('itemDescription').value.trim(),
       icon: icon(category),
-      image_url: publicData.publicUrl
+      image_url: imageUrl
     };
 
-    const {
-      data,
-      error: insertError
-    } = await db
-      .from('listings')
-      .insert(listing)
-      .select()
-      .single();
-
-    if (insertError) {
-      throw insertError;
-    }
-
     /*
-      IMPORTANT:
-      Close and reset the form BEFORE rendering.
-      This fixes the problem where the List an item
-      window remained open after publishing.
+      EDIT EXISTING LISTING
     */
-    event.target.reset();
 
-    const preview = $('imagePreview');
+    if (editingId) {
+      button.textContent = 'Saving changes...';
 
-    if (preview) {
-      preview.style.display = 'none';
+      const { data, error } = await db
+        .from('listings')
+        .update(listing)
+        .eq('id', editingId)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      listings = listings.map((item) =>
+        Number(item.id) === Number(editingId)
+          ? data
+          : item
+      );
+
+      render();
+
+      closeModal();
+
+      status(
+        'Listing updated successfully!',
+        'success'
+      );
+
+    } else {
+
+      /*
+        CREATE NEW LISTING
+      */
+
+      if (!file) {
+        status(
+          'Please choose a photo.',
+          'warning'
+        );
+
+        button.disabled = false;
+        return;
+      }
+
+      button.textContent = 'Publishing listing...';
+
+      const { data, error } = await db
+        .from('listings')
+        .insert(listing)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      listings.unshift(data);
+
+      render();
+
+      closeModal();
+
+      status(
+        'Listing published successfully! Everyone can now see it.',
+        'success'
+      );
     }
-
-    closeModal();
-
-    /*
-      Add the new listing immediately so the seller
-      sees it without waiting for another database load.
-    */
-    listings = [
-      data,
-      ...listings.filter(
-        (item) => Number(item.id) !== Number(data.id)
-      )
-    ];
-
-    render();
-
-    status(
-      'Listing published successfully! Everyone can now see it.',
-      'success'
-    );
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
 
   } catch (error) {
-    console.error('Publishing error:', error);
+    console.error(error);
 
     status(
-      `Publishing failed: ${error.message || 'Unknown error'}`,
+      'Operation failed: ' + error.message,
       'error'
     );
 
   } finally {
-    resetPublishButton();
+    button.disabled = false;
+
+    if (editingId) {
+      button.textContent = 'Save changes';
+    } else {
+      button.textContent = 'Publish listing';
+    }
   }
 };
-
-addImagePreview();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker
     .register('sw.js')
-    .catch((error) => console.warn('Service worker:', error));
+    .catch(console.warn);
 }
 
 load();
